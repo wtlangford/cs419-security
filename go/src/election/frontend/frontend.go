@@ -1,20 +1,20 @@
 package main
 
 import (
-		"log"
-		"net/http"
-		)
+	"log"
+	"net/http"
+)
 
 // Redirect function to point to HTTPS page.
 func redir(w http.ResponseWriter, req *http.Request) {
 	log.Print(req)
-	http.Redirect(w, req, "https://localhost:1443" + req.RequestURI, http.StatusMovedPermanently)
+	http.Redirect(w, req, "https://localhost:1443"+req.RequestURI, http.StatusMovedPermanently)
 }
 
 // Generic handler for a generic page.
 func handler(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte("This is an example server.\n"))
+	w.Write([]byte("This is an example server.\n"))
 }
 
 func main() {
