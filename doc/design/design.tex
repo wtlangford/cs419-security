@@ -1,5 +1,7 @@
 \documentclass[12pt]{article}
 \usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{enumitem}
 
 \title{CS419 Virtual Election Booth}
 \author{Billy Lynch \\ wlynch92 \and Will Langford \\ wtl17}
@@ -9,6 +11,27 @@
 \maketitle
 
 \section{Protocol}
+Key:
+\begin{itemize}[label={}]
+	\item $V = Voter$
+	\item $L = CLA$
+	\item $T = CTF$
+	\item $P = Publish$
+\end{itemize}
+\hfill\\
+\begin{align*}
+	V && \xrightarrow[\hspace*{10cm}]{Name|(Name)_{Sig_{V}}} && L \\
+	V && \xleftarrow[\hspace*{10cm}]{(Name|Validation Number|(Name|Validation Number)_{Sig_{L}})_{E_{KUV}}} && L \\
+	L && \xrightarrow[\hspace*{10cm}]{(Validation Number|(Validation Number)_{Sig_{L}})_{E_{KUT}}} && T \\
+	\hfill\\
+	V && \xrightarrow[\hspace*{10cm}]{(Validation Number|Voter ID|Vote)_{E_{KUT}}} && T \\
+	V && \xleftarrow[\hspace*{10cm}]{ACK|(ACK)_{Sig_{T}}} && T \\
+	\hfill\\
+	T && \xrightarrow[\hspace*{10cm}]{(ID:Vote)_1|(ID:Vote)_2|\dots|(ID:Vote)_n} && P \\
+	T && \xrightarrow[\hspace*{10cm}]{(n|VN_1|VN_2|\dots|VN_n|(n|VN_1|VN_2|\dots|VN_n)_{Sig_T})_{E_{KUL}}} && L \\
+	T && \xleftarrow[\hspace*{10cm}]{(n|Name_1|Name_2|\dots|Name_n|(n|Name_1|Name_2|\dots|Name_n)_{E_{KUT}}} && L \\
+	T && \xrightarrow[\hspace*{10cm}]{Name_1|Name_2|\dots|Name_n} && P
+\end{align*}
 
 \section{System Desgin}
 

@@ -1,3 +1,6 @@
+# Because we are terrible people
+*.swp
+
 # Latex extras
 *.log
 *.aux
