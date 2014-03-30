@@ -1,3 +1,10 @@
+# Latex extras
+*.log
+*.aux
+
+# Private Keys
+*.pem
+
 # Compiled Object files, Static and Dynamic libs (Shared Objects)
 *.o
 *.a
