@@ -1,4 +1,4 @@
-\documentclass[12pt]{article}
+\documentclass{article}
 \usepackage[margin=1in]{geometry}
 \usepackage{amsmath}
 \usepackage{enumitem}
@@ -9,13 +9,13 @@
 
 \begin{document}
 \maketitle
-
 \section{Protocol}
+
 Key:
 \begin{itemize}[label={}]
 	\item $V = Voter$
-	\item $L = CLA$
-	\item $T = CTF$
+	\item $L = CLA = Central Legitimization Agency$
+	\item $T = CTF = Central Tabulation Facility$
 	\item $P = Publish$
 \end{itemize}
 \hfill\\
@@ -33,8 +33,25 @@ Key:
 	T && \xrightarrow[\hspace*{10cm}]{Name_1|Name_2|\dots|Name_n} && P
 \end{align*}
 
-\section{System Desgin}
+\section{System Design}
+
+
 
 \section{Security Requirements}
+
+\begin{itemize}
+  \item Only authorized voters can vote. \\
+		Because the CLA sends back the Validation Number for the voter encrypted using the voter's public key, the voter will only be able to decrypt and use it. Later on, the validation number is always encrypted using the CTFs public key, so it cannot be read if intercepted.
+	\item No one can vote more than once. \\
+		The CLA will keep a list of Validation numbers sent to each voter, so if someone requests another validation number, they will end up getting the same validation number again. The CTF will only accept one vote per validation number, so once it is used other votes with the same validation number will not be accepted.
+	\item No one can determine for whom anyone else voted. \\
+		Since results are published using the user defined random IDs, no one will know each others votes unless they have disclosed their ID.
+	\item No one can duplicate anyone else's votes. \\
+		Since every voter's validation number is encrypted whenever sent to the voter or CTF, it cannot be intercepted then used to change the user's vote. Since the CTF will only take one vote per validation number, replay attacks will fail.	
+	\item Every voter can make sure that his vote has been taken into account in the final tabulation. \\
+		Since voter IDs are unique (the server will reject any IDs that are already in use), every voter will be able to look up their votes to make sure they are correct.
+	\item Everyone knows who voted and who didn't. \\
+		The CTF will contact the CLA at the end for the list of names given a list of validation numbers. Since these can be in arbitrary order (easiest means to do this is sort names lexicographically), it is fine to post them without creating a relation between voters and their votes (which would violate a requirement). 
+\end{itemize}
 
 \end{document}
