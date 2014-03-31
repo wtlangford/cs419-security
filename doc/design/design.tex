@@ -1,61 +1,94 @@
-\documentclass{article}
-\usepackage[margin=1in]{geometry}
-\usepackage{amsmath}
+\documentclass{article} \usepackage[margin=1in]{geometry} \usepackage{amsmath}
 \usepackage{enumitem}
 
-\title{CS419 Virtual Election Booth}
-\author{Billy Lynch \\ wlynch92 \and Will Langford \\ wtl17}
-\date{Spring 2014}
+\title{CS419 Virtual Election Booth} \author{Billy Lynch \\ wlynch92 \and Will
+Langford \\ wtl17} \date{Spring 2014}
 
-\begin{document}
-\maketitle
-\section{Protocol}
+\begin{document} \maketitle \section{Protocol}
 
-Key:
-\begin{itemize}[label={}]
-	\item $V = Voter$
-	\item $L = CLA = $ Central Legitimization Agency
-	\item $T = CTF = $ Central Tabulation Facility
-	\item $P = $ Publish
-\end{itemize}
-\hfill\\
-\begin{align*}
-	V && \xrightarrow[\hspace*{10cm}]{Name|(Name)_{Sig_{V}}} && L \\
-	V && \xleftarrow[\hspace*{10cm}]{(Name|Validation Number|(Name|Validation Number)_{Sig_{L}})_{E_{KUV}}} && L \\
-	L && \xrightarrow[\hspace*{10cm}]{(Validation Number|(Validation Number)_{Sig_{L}})_{E_{KUT}}} && T \\
-	\hfill\\
-	V && \xrightarrow[\hspace*{10cm}]{(Validation Number|Voter ID|Vote)_{E_{KUT}}} && T \\
-	V && \xleftarrow[\hspace*{10cm}]{ACK|(ACK)_{Sig_{T}}} && T \\
-	\hfill\\
-	T && \xrightarrow[\hspace*{10cm}]{(ID:Vote)_1|(ID:Vote)_2|\dots|(ID:Vote)_n} && P \\
-	T && \xrightarrow[\hspace*{10cm}]{(n|VN_1|VN_2|\dots|VN_n|(n|VN_1|VN_2|\dots|VN_n)_{Sig_T})_{E_{KUL}}} && L \\
-	T && \xleftarrow[\hspace*{10cm}]{(n|Name_1|Name_2|\dots|Name_n|(n|Name_1|Name_2|\dots|Name_n)_{E_{KUT}}} && L \\
-	T && \xrightarrow[\hspace*{10cm}]{Name_1|Name_2|\dots|Name_n} && P
+Key: \begin{itemize}[label={}] \item $V = Voter$ \item $L = CLA = $ Central
+Legitimization Agency \item $T = CTF = $ Central Tabulation Facility \item $P =
+$ Publish \end{itemize} \hfill\\ \begin{align*} V &&
+\xrightarrow[\hspace*{10cm}]{Name|(Name)_{Sig_{V}}} && L \\ V &&
+\xleftarrow[\hspace*{10cm}]{(Name|Validation Number|(Name|Validation
+Number)_{Sig_{L}})_{E_{KUV}}} && L \\ L &&
+\xrightarrow[\hspace*{10cm}]{(Validation Number|(Validation
+Number)_{Sig_{L}})_{E_{KUT}}} && T \\ \hfill\\ V &&
+\xrightarrow[\hspace*{10cm}]{(Validation Number|Voter ID|Vote)_{E_{KUT}}} && T
+\\ V && \xleftarrow[\hspace*{10cm}]{ACK|(ACK)_{Sig_{T}}} && T \\ \hfill\\ T &&
+\xrightarrow[\hspace*{10cm}]{(ID:Vote)_1|(ID:Vote)_2|\dots|(ID:Vote)_n} && P \\
+T &&
+\xrightarrow[\hspace*{10cm}]{(n|VN_1|VN_2|\dots|VN_n|(n|VN_1|VN_2|\dots|VN_n)_{Sig_T})_{E_{KUL}}}
+&& L \\ T &&
+\xleftarrow[\hspace*{10cm}]{(n|Name_1|Name_2|\dots|Name_n|(n|Name_1|Name_2|\dots|Name_n)_{E_{KUT}}}
+&& L \\ T && \xrightarrow[\hspace*{10cm}]{Name_1|Name_2|\dots|Name_n} && P
 \end{align*}
 
 \section{System Design}
 
-Assumption: We are given a list of valid voters and public keys to start off with.
+Assumption: We are given a list of valid voters and corresponding public keys
+to start off with.
 
 \subsection{Getting a validation number}
 
+To get a validation number, voters first requests a validation number from the
+CLA, signed with their private key. The CLA will then verify the message came
+from the user. If this is the first time the CLA has gotten a request from the
+voter, then the CLA will generate a new validation number. If the voter has
+already requested a validation number, then the CLA will return the same
+validation number that was previously generated. The returning message will be
+signed by the CLA and encrypted with the voter's public key (so only the user
+will be able to decrypt the message to get the validation number. \\
+\hfill \\
+The CLA does not have to send all the validation numbers at once to the CTF. In
+order for voters to vote independently (not have to wait for all voters to get
+their validation numbers), we can send their validation number to the CTF as
+soon as it is generated, since the validation number will not change.\\
+\hfill \\
+The CTF will continue to accept responses until the voting period ends.
+
 \subsection{Sending votes}
 
+To send a vote, the voter will use the validation number received from the CLA
+to contact the CTF with their vote. The user will also have to provide a unique
+user ID for the CTF. If the voter ID has already been taken, then the CTF will
+return an error saying that the ID is in use (this does not cause a threat
+since the authorization of the vote is based on the validation number).
+Otherwise, the CTF will acknowledge (ACK) the response was received regardless
+of whether the vote was successful or not (so that mallicious users can not use
+this as a means of checking whether they have successfully guessed a validation
+number).
+
 \subsection{Publishing Votes}
+
+When voting is complete (the voting period is over), the CTF can simply publish the result and all of the VoterID:Vote pairs. To satisfy the requirement of letting users know who did and did not vote, the CTF must contact the CLA with the validation numbers of those who voted. This list will not be sent in lexicographic order by validation number so that it is unlikely to create a relation between a votes and validation numbers. The CTF will then publish the list of those who voted. \\
 
 \section{Security Requirements}
 
 \begin{itemize}
   \item Only authorized voters can vote. \\
-		Because the CLA sends back the Validation Number for the voter encrypted using the voter's public key, the voter will only be able to decrypt and use it. Later on, the validation number is always encrypted using the CTFs public key, so it cannot be read if intercepted.
+		Because the CLA sends back the Validation Number for the voter encrypted
+		using the voter's public key, the voter will only be able to decrypt and
+		use it. Later on, the validation number is always encrypted using the CTFs
+		public key, so it cannot be read if intercepted.
 	\item No one can vote more than once. \\
-		The CLA will keep a list of Validation numbers sent to each voter, so if someone requests another validation number, they will end up getting the same validation number again. The CTF will only accept one vote per validation number, so once it is used other votes with the same validation number will not be accepted.
+		The CLA will keep a list of Validation numbers sent to each voter, so if
+		someone requests another validation number, they will end up getting the
+		same validation number again. The CTF will only accept one vote per
+		validation number, so once it is used other votes with the same validation
+		number will not be accepted.
 	\item No one can determine for whom anyone else voted. \\
-		Since results are published using the user defined random IDs, no one will know each others votes unless they have disclosed their ID.
+		Since results are published using the user defined random IDs, no one will
+		know each others votes unless they have disclosed their ID.
 	\item No one can duplicate anyone else's votes. \\
-		Since every voter's validation number is encrypted whenever sent to the voter or CTF, it cannot be intercepted then used to change the user's vote. Since the CTF will only take one vote per validation number, replay attacks will fail.	
+		Since every voter's validation number is encrypted whenever sent to the
+		voter or CTF, it cannot be intercepted then used to change the user's vote.
+		Since the CTF will only take one vote per validation number, replay attacks
+		will fail.	
 	\item Every voter can make sure that his vote has been taken into account in the final tabulation. \\
-		Since voter IDs are unique (the server will reject any IDs that are already in use), every voter will be able to look up their votes to make sure they are correct.
+		Since voter IDs are unique (the server will reject any IDs that are already
+		in use), every voter will be able to look up their votes to make sure they
+		are correct.
 	\item Everyone knows who voted and who didn't. \\
 		The CTF will contact the CLA at the end for the list of names given a list of validation numbers. Since these can be in arbitrary order (easiest means to do this is sort names lexicographically), it is fine to post them without creating a relation between voters and their votes (which would violate a requirement). 
 \end{itemize}
