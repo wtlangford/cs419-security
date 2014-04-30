@@ -1,16 +1,24 @@
 package main
 
 import (
-	"log"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
 	"github.com/go-martini/martini"
 	"github.com/martini-contrib/binding"
+	"log"
 	"net/http"
 )
 
-var db map[string]string = map[string]string {
-	"a": "1",
-	"b": "2",
+// Map of username <-> secrets
+var secret map[string]string = map[string]string{
+	"a":    "1",
+	"b":    "2",
+	"asdf": "1234",
 }
+
+// Map of username <-> validation numbers
+var validation map[string]string = make(map[string]string)
 
 // Generic handler for a generic page.
 func handler() string {
@@ -18,13 +26,29 @@ func handler() string {
 }
 
 type Registration struct {
-	Name string `form:"name"`
+	Name   string `form:"name"`
 	Secret string `form:"secret"`
 }
 
-func RegisterUser(reg Registration) string{
-	log.Println(reg)
-	return "asdf"
+func RegisterUser(reg Registration) (int, []byte) {
+	log.Println("Received:", reg)
+	if reg.Secret == secret[reg.Name] {
+		if validation[reg.Name] == "" {
+			// Generate random 1024 bit number
+			b := make([]byte, 128)
+			_, err := rand.Read(b)
+			if err != nil {
+				log.Println("error:", err)
+				return 500, []byte("Error generating validation number.")
+			}
+			validation[reg.Name] = base64.StdEncoding.EncodeToString(b)
+		}
+
+		// Return JSON response with base64 encoded validation number
+		res, _ := json.Marshal(map[string]string{"Validation": validation[reg.Name]})
+		return 200, res
+	}
+	return 403, []byte("User does not exist.")
 }
 
 func main() {
