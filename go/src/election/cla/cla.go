@@ -34,7 +34,6 @@ type Registration struct {
 // number if their (name, secret) pair is correct. If a number was already requested,
 // then the previous number is returned again.
 func RegisterUser(reg Registration) (int, []byte) {
-	log.Println("Received:", reg)
 	if reg.Secret == secret[reg.Name] {
 		if validation[reg.Name] == "" {
 			// Generate random 1024 bit number
