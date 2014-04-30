@@ -29,5 +29,4 @@ func main() {
 	if err := http.ListenAndServe(":8000", http.HandlerFunc(redir)); err != nil {
 		log.Fatal(err)
 	}
-
 }
