@@ -1,13 +1,21 @@
 package main
 
 import (
+	"crypto"
 	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha512"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"github.com/go-martini/martini"
 	"github.com/martini-contrib/binding"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 )
 
 // Map of username <-> secrets
@@ -19,6 +27,11 @@ var secret map[string]string = map[string]string{
 
 // Map of username <-> validation numbers
 var validation map[string]string = make(map[string]string)
+
+// Security Stuff
+var certpool *x509.CertPool
+var cert tls.Certificate
+var privKey *rsa.PrivateKey
 
 // Generic handler for a generic page.
 func handler() string {
@@ -48,12 +61,53 @@ func RegisterUser(reg Registration) (int, []byte) {
 
 		// Return JSON response with base64 encoded validation number
 		res, _ := json.Marshal(map[string]string{"Validation": validation[reg.Name]})
+		SendToCLA(validation[reg.Name])
 		return 200, res
 	}
 	return 403, []byte("User does not exist.")
 }
 
+func SignData(payload string) string {
+	hash := sha512.New()
+	hash.Write([]byte(payload))
+	crypt, err := rsa.SignPKCS1v15(rand.Reader, privKey, crypto.SHA512, hash.Sum(nil))
+	if err != nil {
+		log.Fatal(err)
+	}
+	return base64.StdEncoding.EncodeToString(crypt)
+}
+
+func SendToCLA(payload string) {
+	sig := SignData(payload)
+	log.Println(sig)
+	if _, err := http.PostForm("https://localhost:1443/vn",
+		url.Values{"vn": {payload}, "sig": {sig}}); err != nil {
+			log.Fatal(err)
+	}
+}
+
 func main() {
+	certpool = x509.NewCertPool()
+	pemFile, err := ioutil.ReadFile("ctf.pem")
+	if err != nil {
+		log.Println(err)
+	}
+	if !certpool.AppendCertsFromPEM(pemFile) {
+		log.Println("failed to AppendCert")
+	}
+	cert, err = tls.LoadX509KeyPair("cert.pem", "key.pem")
+
+	buf, err := ioutil.ReadFile("cla-rsa")
+	if err != nil {
+		log.Fatal("Could not read private key")
+	}
+	block, _ := pem.Decode(buf)
+	privKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+
 	m := martini.Classic()
 	m.Post("/register", binding.Bind(Registration{}), RegisterUser)
 	m.Get("/", handler)
