@@ -1,12 +1,16 @@
 # Because we are terrible people
 *.swp
 
+# Downloaded libraries
+go/src/github.com/
+
 # Latex extras
 *.log
 *.aux
 
 # Private Keys
 *.pem
+cla-rsa
 
 # Compiled Object files, Static and Dynamic libs (Shared Objects)
 *.o
