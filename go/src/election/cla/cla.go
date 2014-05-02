@@ -80,6 +80,8 @@ func SignData(payload string) string {
 func SendToCLA(payload string) {
 	sig := SignData(payload)
 	log.Println(sig)
+
+	// Need to ignore self-signed cert. Signatures will be used to confirm identity
 	tr := &http.Transport{
 		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
 	}
