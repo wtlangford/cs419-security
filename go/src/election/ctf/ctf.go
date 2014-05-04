@@ -51,25 +51,26 @@ func VerifySig (message []byte, sig []byte, r *rsa.PublicKey) error {
 	return rsa.VerifyPKCS1v15(r, crypto.SHA512, d, sig)
 }
 
-func addValidationNumber(params FormPost) string {
+func addValidationNumber(params FormPost) (int, string) {
 	vn := params.ValNum
 	sig := params.Sig
 
 	rawSig, _ := base64.StdEncoding.DecodeString(sig)
 	if err := VerifySig([]byte(vn), rawSig, claKey); err != nil {
 		log.Println(err)
+		return 400, "Bad Request"
 	}
 
 	ctf.Lock()
 	_, ok := ctf.validationNumbers[vn]
 	if ok {
 		ctf.Unlock()
-		return "BAD!"
+		return 500, "BAD!"
 	}
 	ctf.validationNumbers[vn] = true
 	str := fmt.Sprint(ctf.validationNumbers)
 	ctf.Unlock()
-	return str
+	return 200, str
 }
 
 func vote(params FormPost) string {

@@ -57,11 +57,11 @@ func RegisterUser(reg Registration) (int, []byte) {
 				return 500, []byte("Error generating validation number.")
 			}
 			validation[reg.Name] = base64.StdEncoding.EncodeToString(b)
+			SendToCLA(validation[reg.Name])
 		}
 
 		// Return JSON response with base64 encoded validation number
 		res, _ := json.Marshal(map[string]string{"Validation": validation[reg.Name]})
-		SendToCLA(validation[reg.Name])
 		return 200, res
 	}
 	return 403, []byte("User does not exist.")
