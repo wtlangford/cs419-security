@@ -1,16 +1,12 @@
 package main
 
 import (
-	"crypto"
 	"crypto/rsa"
-	"crypto/sha512"
-	"crypto/x509"
+	"election/common"
 	"encoding/base64"
-	"encoding/pem"
 	"fmt"
 	"github.com/go-martini/martini"
 	"github.com/martini-contrib/binding"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"sync"
@@ -33,30 +29,16 @@ var ctf CTF = CTF{validationNumbers: make(map[string]bool), votes: make(map[stri
 var choices []string = []string{"tacocat", "racecar", "radar", "civic"}
 var claKey *rsa.PublicKey
 
-func stringInSlice(a string, list []string) bool {
-	for _, b := range list {
-		if b == a {
-			return true
-		}
-	}
-	return false
-}
-
-func VerifySig(message []byte, sig []byte, r *rsa.PublicKey) error {
-	h := sha512.New()
-	h.Write(message)
-	d := h.Sum(nil)
-	return rsa.VerifyPKCS1v15(r, crypto.SHA512, d, sig)
-}
-
 func addValidationNumber(params FormPost) (int, string) {
 	vn := params.ValNum
 	sig := params.Sig
 
 	rawSig, _ := base64.StdEncoding.DecodeString(sig)
-	if err := VerifySig([]byte(vn), rawSig, claKey); err != nil {
+	if err := common.VerifySig([]byte(vn), rawSig, claKey); err != nil {
 		log.Println(err)
 		return 400, "Bad Request"
+	} else {
+		log.Println("VN validated")
 	}
 
 	ctf.Lock()
@@ -83,7 +65,7 @@ func vote(params FormPost) string {
 	} else if v == false {
 		ctf.Unlock()
 		return "This vn has already voted..."
-	} else if !stringInSlice(vote, choices) {
+	} else if !common.StringInSlice(vote, choices) {
 		ctf.Unlock()
 		return "Invalid vote"
 	}
@@ -96,26 +78,12 @@ func vote(params FormPost) string {
 }
 
 func main() {
-
-	// Read in keys
-	buf, err := ioutil.ReadFile("cla-rsa.pub")
-	if err != nil {
-		log.Fatal("Could not read CLA Public Key")
+	var err error
+	if claKey, err = common.ReadPublicKey("cla-rsa.pub"); err != nil {
+		log.Fatal(err)
 	}
-	block, _ := pem.Decode(buf)
-	log.Println(block.Type)
-	pubkey, err := x509.ParsePKIXPublicKey(block.Bytes)
-	if err != nil {
-		log.Fatal("Could not parse CLA Public Key")
-	}
-	switch t := pubkey.(type) {
-	case *rsa.PublicKey:
-		claKey = t
-	default:
-		log.Fatal("unknown key type")
-	}
-
 	m := martini.Classic()
+
 	m.Post("/vn", binding.Bind(FormPost{}), addValidationNumber)
 	m.Post("/vote", binding.Bind(FormPost{}), vote)
 	m.Get("/results", func() string {

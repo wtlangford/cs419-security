@@ -1,18 +1,14 @@
 package main
 
 import (
-	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha512"
 	"crypto/tls"
-	"crypto/x509"
+	"election/common"
 	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
 	"github.com/go-martini/martini"
 	"github.com/martini-contrib/binding"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -29,8 +25,6 @@ var secret map[string]string = map[string]string{
 var validation map[string]string = make(map[string]string)
 
 // Security Stuff
-var certpool *x509.CertPool
-var cert tls.Certificate
 var privKey *rsa.PrivateKey
 
 // Generic handler for a generic page.
@@ -67,52 +61,26 @@ func RegisterUser(reg Registration) (int, []byte) {
 	return 403, []byte("User does not exist.")
 }
 
-func SignData(payload string) string {
-	hash := sha512.New()
-	hash.Write([]byte(payload))
-	crypt, err := rsa.SignPKCS1v15(rand.Reader, privKey, crypto.SHA512, hash.Sum(nil))
-	if err != nil {
-		log.Fatal(err)
-	}
-	return base64.StdEncoding.EncodeToString(crypt)
-}
-
 func SendToCLA(payload string) {
-	sig := SignData(payload)
+	sig := common.SignData([]byte(payload), privKey)
 	log.Println(sig)
 
 	// Need to ignore self-signed cert. Signatures will be used to confirm identity
 	tr := &http.Transport{
-		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 	client := &http.Client{Transport: tr}
 	if _, err := client.PostForm("https://localhost:4000/vn",
 		url.Values{"vn": {payload}, "sig": {sig}}); err != nil {
-			log.Println(err)
+		log.Println(err)
 	}
 }
 
 func main() {
-	certpool = x509.NewCertPool()
-	pemFile, err := ioutil.ReadFile("ctf.pem")
-	if err != nil {
-		log.Println(err)
-	}
-	if !certpool.AppendCertsFromPEM(pemFile) {
-		log.Println("failed to AppendCert")
-	}
-	cert, err = tls.LoadX509KeyPair("cert.pem", "key.pem")
-
-	buf, err := ioutil.ReadFile("cla-rsa")
-	if err != nil {
-		log.Fatal("Could not read private key")
-	}
-	block, _ := pem.Decode(buf)
-	privKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
-	if err != nil {
+	var err error
+	if privKey, err = common.ReadPrivateKey("cla-rsa"); err != nil {
 		log.Fatal(err)
 	}
-
 
 	m := martini.Classic()
 	m.Post("/register", binding.Bind(Registration{}), RegisterUser)
