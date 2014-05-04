@@ -55,15 +55,11 @@ func addValidationNumber(params FormPost) string {
 	vn := params.ValNum
 	sig := params.Sig
 
-	rawVN, _ := base64.StdEncoding.DecodeString(vn)
 	rawSig, _ := base64.StdEncoding.DecodeString(sig)
-
-	if err := VerifySig(rawVN, rawSig, claKey); err != nil {
-		return "MESSAGE VERIFIED!"
-	} else {
-		return "MESSAGE FAILED!"
+	if err := VerifySig([]byte(vn), rawSig, claKey); err != nil {
+		log.Println(err)
 	}
-	/*
+
 	ctf.Lock()
 	_, ok := ctf.validationNumbers[vn]
 	if ok {
@@ -74,7 +70,6 @@ func addValidationNumber(params FormPost) string {
 	str := fmt.Sprint(ctf.validationNumbers)
 	ctf.Unlock()
 	return str
-	*/
 }
 
 func vote(params FormPost) string {
@@ -109,11 +104,17 @@ func main() {
 		log.Fatal("Could not read CLA Public Key")
 	}
 	block, _ := pem.Decode(buf)
+	log.Println(block.Type)
 	pubkey, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {
 		log.Fatal("Could not parse CLA Public Key")
 	}
-	claKey = pubkey.(*rsa.PublicKey)
+	switch t := pubkey.(type) {
+		case *rsa.PublicKey:
+			claKey = t
+		default:
+			log.Fatal("unknown key type")
+	}
 
 	m := martini.Classic()
 	m.Post("/vn",binding.Bind(FormPost{}),addValidationNumber)
