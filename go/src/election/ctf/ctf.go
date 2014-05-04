@@ -1,7 +1,15 @@
 package main
 
 import (
+	"crypto"
+	"crypto/rsa"
+	"crypto/sha512"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/pem"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"github.com/go-martini/martini"
 	"github.com/martini-contrib/binding"
@@ -16,6 +24,7 @@ type CTF struct{
 
 type FormPost struct {
 	ValNum string `form:"vn"`
+	Sig string `form:"sig"`
 	Id string `form:"id"`
 	Vote string `form:"vote"`
 }
@@ -23,6 +32,7 @@ type FormPost struct {
 
 var ctf CTF = CTF{validationNumbers:make(map[string]bool), votes:make(map[string] []string)}
 var choices []string = []string{"tacocat","racecar","radar","civic"}
+var claKey *rsa.PublicKey
 
 func stringInSlice(a string, list []string) bool {
     for _, b := range list {
@@ -33,8 +43,27 @@ func stringInSlice(a string, list []string) bool {
     return false
 }
 
+
+func VerifySig (message []byte, sig []byte, r *rsa.PublicKey) error {
+	h := sha512.New()
+	h.Write(message)
+	d := h.Sum(nil)
+	return rsa.VerifyPKCS1v15(r, crypto.SHA512, d, sig)
+}
+
 func addValidationNumber(params FormPost) string {
 	vn := params.ValNum
+	sig := params.Sig
+
+	rawVN, _ := base64.StdEncoding.DecodeString(vn)
+	rawSig, _ := base64.StdEncoding.DecodeString(sig)
+
+	if err := VerifySig(rawVN, rawSig, claKey); err != nil {
+		return "MESSAGE VERIFIED!"
+	} else {
+		return "MESSAGE FAILED!"
+	}
+	/*
 	ctf.Lock()
 	_, ok := ctf.validationNumbers[vn]
 	if ok {
@@ -45,6 +74,7 @@ func addValidationNumber(params FormPost) string {
 	str := fmt.Sprint(ctf.validationNumbers)
 	ctf.Unlock()
 	return str
+	*/
 }
 
 func vote(params FormPost) string {
@@ -72,6 +102,19 @@ func vote(params FormPost) string {
 }
 
 func main() {
+
+	// Read in keys
+	buf, err := ioutil.ReadFile("cla-rsa.pub")
+	if err != nil {
+		log.Fatal("Could not read CLA Public Key")
+	}
+	block, _ := pem.Decode(buf)
+	pubkey, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		log.Fatal("Could not parse CLA Public Key")
+	}
+	claKey = pubkey.(*rsa.PublicKey)
+
 	m := martini.Classic()
 	m.Post("/vn",binding.Bind(FormPost{}),addValidationNumber)
 	m.Post("/vote",binding.Bind(FormPost{}),vote)
