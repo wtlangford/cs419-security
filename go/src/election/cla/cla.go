@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
 )
 
 // Map of username <-> secrets
@@ -21,8 +22,10 @@ var secret map[string]string = map[string]string{
 	"asdf": "1234",
 }
 
-// Map of username <-> validation numbers
+// Map of username -> validation numbers
 var validation map[string]string = make(map[string]string)
+// Map of validation numbers -> usernames
+var voter map[string]string = make (map[string]string)
 
 // Security Stuff
 var privKey *rsa.PrivateKey
@@ -35,6 +38,10 @@ func handler() string {
 type Registration struct {
 	Name   string `form:"name"`
 	Secret string `form:"secret"`
+}
+
+type ValidationNumbers struct {
+	Payload	[]string
 }
 
 // RegisterUser takes a user provided registration, then returns a random validation
@@ -51,7 +58,8 @@ func RegisterUser(reg Registration) (int, []byte) {
 				return 500, []byte("Error generating validation number.")
 			}
 			validation[reg.Name] = base64.StdEncoding.EncodeToString(b)
-			SendToCLA(validation[reg.Name])
+			voter[validation[reg.Name]] = reg.Name
+			SendToCTF(validation[reg.Name])
 		}
 
 		// Return JSON response with base64 encoded validation number
@@ -61,7 +69,8 @@ func RegisterUser(reg Registration) (int, []byte) {
 	return 403, []byte("User does not exist.")
 }
 
-func SendToCLA(payload string) {
+// SendToCTF sends the VN # payload to the CTF server.
+func SendToCTF(payload string) {
 	sig := common.SignData([]byte(payload), privKey)
 	log.Println(sig)
 
@@ -76,6 +85,23 @@ func SendToCLA(payload string) {
 	}
 }
 
+// GetVotingUsers returns a list of users who voted
+func GetVotingUsers(data ValidationNumbers) (int, []byte){
+	voters := []string{}
+	for _, vn := range data.Payload {
+		if voter[vn] != "" {
+			voters = append(voters, voter[vn])
+		}
+	}
+	// Sort users so there is no particular ordering of who voted
+	sort.Strings(voters)
+	retval, err := json.Marshal(voters)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return 200, retval
+}
+
 func main() {
 	var err error
 	if privKey, err = common.ReadPrivateKey("cla-rsa"); err != nil {
@@ -84,6 +110,7 @@ func main() {
 
 	m := martini.Classic()
 	m.Post("/register", binding.Bind(Registration{}), RegisterUser)
+	m.Post("/voters", binding.Bind(ValidationNumbers{}), GetVotingUsers)
 	m.Get("/", handler)
 	log.Println("About to listen on 1444. Go to https://localhost:1444/")
 	log.Fatal(http.ListenAndServeTLS(":1444", "cert.pem", "key.pem", m))

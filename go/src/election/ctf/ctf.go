@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rsa"
+	"crypto/tls"
 	"election/common"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"github.com/go-martini/martini"
 	"github.com/martini-contrib/binding"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"sync"
@@ -77,6 +81,44 @@ func vote(params FormPost) string {
 	return res
 }
 
+type Results struct {
+	Votes map[string][]string
+	Voters []string
+}
+
+func getResults() []byte {
+	// Get list of validation numbers
+	vn := make([]string, len(ctf.validationNumbers))
+	for key, _ := range ctf.validationNumbers {
+		vn = append(vn, key)
+	}
+
+	// Send VNs to CLA, get back list of voters
+	payload, _ := json.Marshal(map[string][]string{"payload":vn})
+	t := &http.Transport {
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: t}
+	resp, err := client.Post("https://localhost:1444/voters", "application/json", bytes.NewBuffer(payload))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	var voters []string
+	if err := json.Unmarshal(body, &voters); err != nil {
+		log.Println("Unmarshal:", err)
+	}
+
+	// Return results
+	results := Results{ctf.votes, voters}
+	retval, err := json.Marshal(results)
+	if err != nil {
+		log.Println("Marshal: ", err)
+	}
+	return retval
+}
+
 func main() {
 	var err error
 	if claKey, err = common.ReadPublicKey("cla-rsa.pub"); err != nil {
@@ -86,12 +128,7 @@ func main() {
 
 	m.Post("/vn", binding.Bind(FormPost{}), addValidationNumber)
 	m.Post("/vote", binding.Bind(FormPost{}), vote)
-	m.Get("/results", func() string {
-		ctf.RLock()
-		str := fmt.Sprint(ctf.votes)
-		ctf.RUnlock()
-		return str
-	})
+	m.Get("/results", getResults)
 
 	m.Get("/", func() string {
 		return "Martini up!"
