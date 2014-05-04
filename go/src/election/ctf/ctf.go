@@ -85,5 +85,5 @@ func main() {
 	m.Get("/",func() string {
 		return "Martini up!"
 	})
-	http.ListenAndServe("wlangford.net:4000",m)
+	http.ListenAndServeTLS(":4000", "cert.pem", "key.pem", m)
 }

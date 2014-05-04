@@ -80,9 +80,15 @@ func SignData(payload string) string {
 func SendToCLA(payload string) {
 	sig := SignData(payload)
 	log.Println(sig)
-	if _, err := http.PostForm("https://localhost:1443/vn",
+
+	// Need to ignore self-signed cert. Signatures will be used to confirm identity
+	tr := &http.Transport{
+		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
+	if _, err := client.PostForm("https://localhost:4000/vn",
 		url.Values{"vn": {payload}, "sig": {sig}}); err != nil {
-			log.Fatal(err)
+			log.Println(err)
 	}
 }
 
