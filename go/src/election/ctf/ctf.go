@@ -18,7 +18,11 @@ import (
 
 type CTF struct {
 	sync.RWMutex
+	// Map of VN -> Can the user vote
 	validationNumbers map[string]bool
+	// Map of unique user IDs -> VN
+	ids								map[string]string
+	// Map of candidates -> list of voters
 	votes             map[string][]string
 }
 
@@ -29,7 +33,11 @@ type FormPost struct {
 	Vote   string `form:"vote"`
 }
 
-var ctf CTF = CTF{validationNumbers: make(map[string]bool), votes: make(map[string][]string)}
+var ctf CTF = CTF {
+	validationNumbers: make(map[string]bool),
+	votes: make(map[string][]string),
+	ids: make(map[string]string),
+}
 var choices []string = []string{"tacocat", "racecar", "radar", "civic"}
 var claKey *rsa.PublicKey
 
@@ -46,6 +54,7 @@ func addValidationNumber(params FormPost) (int, string) {
 	}
 
 	ctf.Lock()
+
 	_, ok := ctf.validationNumbers[vn]
 	if ok {
 		ctf.Unlock()
@@ -57,28 +66,34 @@ func addValidationNumber(params FormPost) (int, string) {
 	return 200, str
 }
 
-func vote(params FormPost) string {
+func vote(params FormPost) (int, string) {
 	vn := params.ValNum
 	id := params.Id
 	vote := params.Vote
 
 	ctf.Lock()
+	if _, ok := ctf.ids[params.Id]; ok {
+		ctf.Unlock()
+		return 400, "ID is already in use"
+	} else {
+		ctf.ids[params.Id] = vn
+	}
 	if v, ok := ctf.validationNumbers[vn]; ok == false {
 		ctf.Unlock()
-		return fmt.Sprint("This vn does not exist...", vn, "x", params, "\n")
+		return 401, fmt.Sprint("This vn does not exist...", vn, "x", params, "\n")
 	} else if v == false {
 		ctf.Unlock()
-		return "This vn has already voted..."
+		return 403, "This vn has already voted..."
 	} else if !common.StringInSlice(vote, choices) {
 		ctf.Unlock()
-		return "Invalid vote"
+		return 400, "Invalid vote"
 	}
 
 	ctf.votes[vote] = append(ctf.votes[vote], id)
 	ctf.validationNumbers[vn] = false
 	res := fmt.Sprint(ctf.votes[vote])
 	ctf.Unlock()
-	return res
+	return 200, res
 }
 
 type Results struct {
