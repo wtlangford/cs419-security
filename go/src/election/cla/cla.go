@@ -31,6 +31,7 @@ var voter map[string]string = make (map[string]string)
 
 // Security Stuff
 var privKey *rsa.PrivateKey
+var ctfKey *rsa.PublicKey
 var certPool *x509.CertPool = x509.NewCertPool()
 
 // Generic handler for a generic page.
@@ -44,7 +45,8 @@ type Registration struct {
 }
 
 type ValidationNumbers struct {
-	Payload	[]string
+	Payload	string
+	Sig		string
 }
 
 // RegisterUser takes a user provided registration, then returns a random validation
@@ -74,7 +76,11 @@ func RegisterUser(reg Registration) (int, []byte) {
 
 // SendToCTF sends the VN # payload to the CTF server.
 func SendToCTF(payload string) {
-	sig := common.SignData([]byte(payload), privKey)
+	sig,err := common.SignData([]byte(payload), privKey)
+	if err != nil {
+		log.Println(err)
+		return
+	}
 	log.Println(sig)
 
 	// Need to ignore self-signed cert. Signatures will be used to confirm identity
@@ -90,8 +96,20 @@ func SendToCTF(payload string) {
 
 // GetVotingUsers returns a list of users who voted
 func GetVotingUsers(data ValidationNumbers) (int, []byte){
+	log.Println(data.Payload)
+	err := common.VerifySig([]byte(data.Payload), data.Sig, ctfKey)
+	if err != nil {
+		log.Println(err)
+		return 401, []byte("Invalid signature")
+	}
+	var payload []string
+	err = json.Unmarshal([]byte(data.Payload), &payload)
+	if err != nil {
+		return 400, []byte("Malformed data")
+	}
+
 	voters := []string{}
-	for _, vn := range data.Payload {
+	for _, vn := range payload {
 		if voter[vn] != "" {
 			voters = append(voters, voter[vn])
 		}
@@ -108,6 +126,9 @@ func GetVotingUsers(data ValidationNumbers) (int, []byte){
 func main() {
 	var err error
 	if privKey, err = common.ReadPrivateKey("cla-rsa"); err != nil {
+		log.Fatal(err)
+	}
+	if ctfKey, err = common.ReadPublicKey("ctf-rsa.pub"); err != nil {
 		log.Fatal(err)
 	}
 	pemFile, err := ioutil.ReadFile("/var/www/CA/certs/cacert.crt")

@@ -1,12 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"election/common"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"github.com/go-martini/martini"
@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 )
 
@@ -39,17 +40,20 @@ var ctf CTF = CTF {
 	votes: make(map[string][]string),
 	ids: make(map[string]string),
 }
+var stopped bool = false
 var choices []string = []string{"tacocat", "racecar", "radar", "civic"}
 var claKey *rsa.PublicKey
+var privateKey *rsa.PrivateKey
 var certPool *x509.CertPool = x509.NewCertPool()
 
 func addValidationNumber(params FormPost) (int, string) {
+	if stopped {
+		return 401, "Voting ended"
+	}
 	vn := params.ValNum
 	sig := params.Sig
 
-	rawSig, _ := base64.StdEncoding.DecodeString(sig)
-	if err := common.VerifySig([]byte(vn), rawSig, claKey); err != nil {
-		log.Println(err)
+	if err := common.VerifySig([]byte(vn), sig, claKey); err != nil {
 		return 400, "Bad Request"
 	} else {
 		log.Println("VN validated")
@@ -69,6 +73,9 @@ func addValidationNumber(params FormPost) (int, string) {
 }
 
 func vote(params FormPost) (int, string) {
+	if stopped {
+		return 401, "Voting ended"
+	}
 	vn := params.ValNum
 	id := params.Id
 	vote := params.Vote
@@ -77,8 +84,6 @@ func vote(params FormPost) (int, string) {
 	if _, ok := ctf.ids[params.Id]; ok {
 		ctf.Unlock()
 		return 400, "ID is already in use"
-	} else {
-		ctf.ids[params.Id] = vn
 	}
 	if v, ok := ctf.validationNumbers[vn]; ok == false {
 		ctf.Unlock()
@@ -91,11 +96,11 @@ func vote(params FormPost) (int, string) {
 		return 400, "Invalid vote"
 	}
 
+	ctf.ids[params.Id] = vn
 	ctf.votes[vote] = append(ctf.votes[vote], id)
 	ctf.validationNumbers[vn] = false
-	res := fmt.Sprint(ctf.votes[vote])
 	ctf.Unlock()
-	return 200, res
+	return 200, "Vote accepted"
 }
 
 type Results struct {
@@ -103,7 +108,10 @@ type Results struct {
 	Voters []string
 }
 
-func getResults() []byte {
+func getResults() (int, []byte) {
+	if !stopped {
+		return 401, []byte("Voting not ended")
+	}
 	// Get list of validation numbers
 	vn := make([]string, len(ctf.validationNumbers))
 	for key, _ := range ctf.validationNumbers {
@@ -111,14 +119,20 @@ func getResults() []byte {
 	}
 
 	// Send VNs to CLA, get back list of voters
-	payload, _ := json.Marshal(map[string][]string{"payload":vn})
+	payload, _ := json.Marshal(vn)
+	sig, err := common.SignData(payload,privateKey)
+	if err != nil {
+		return 500, []byte("Could not sign data")
+	}
+	payload, _ = json.Marshal(map[string]string{"payload":string(payload),"sig":sig})
 	t := &http.Transport {
 		TLSClientConfig: &tls.Config{RootCAs:certPool},
 	}
 	client := &http.Client{Transport: t}
 	resp, err := client.Post("https://cla.wlangford.net:1444/voters", "application/json", bytes.NewBuffer(payload))
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return 500, []byte("Could not retrieve voters")
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
@@ -133,7 +147,24 @@ func getResults() []byte {
 	if err != nil {
 		log.Println("Marshal: ", err)
 	}
-	return retval
+	return 200, retval
+}
+
+func endTest() {
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			log.Fatal("Can't read from stdin.  Cry.  A lot.")
+		}
+		log.Println(line)
+		if line == "kill\n" {
+			stopped = true
+			log.Println("Shut it down.")
+		}
+	}
+
+
 }
 
 func main() {
@@ -145,13 +176,21 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	certPool.AppendCertsFromPEM(pemFile)
+	privateKey, err = common.ReadPrivateKey("ctf-rsa")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if certPool.AppendCertsFromPEM(pemFile) == false {
+		log.Fatal("Could not read root ca")
+	}
 
 	m := martini.Classic()
 
 	m.Post("/vn", binding.Bind(FormPost{}), addValidationNumber)
 	m.Post("/vote", binding.Bind(FormPost{}), vote)
 	m.Get("/results", getResults)
+	go endTest()
 
 	m.Get("/", func() string {
 		return "Martini up!"

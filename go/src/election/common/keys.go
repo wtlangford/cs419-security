@@ -13,26 +13,30 @@ import (
 	"log"
 )
 
-func SignData(payload []byte, k *rsa.PrivateKey) string {
+func SignData(payload []byte, k *rsa.PrivateKey) (string, error) {
 	hash := sha512.New()
 	hash.Write(payload)
 	crypt, err := rsa.SignPKCS1v15(rand.Reader, k, crypto.SHA512, hash.Sum(nil))
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
-	return base64.StdEncoding.EncodeToString(crypt)
+	return base64.StdEncoding.EncodeToString(crypt), nil
 }
 
-func VerifySig(message []byte, sig []byte, k *rsa.PublicKey) error {
+func VerifySig(message []byte, sig string, k *rsa.PublicKey) error {
 	h := sha512.New()
 	h.Write(message)
 	d := h.Sum(nil)
-	return rsa.VerifyPKCS1v15(k, crypto.SHA512, d, sig)
+	sigData,err := base64.StdEncoding.DecodeString(sig)
+	if err != nil {
+		return err
+	}
+	return rsa.VerifyPKCS1v15(k, crypto.SHA512, d, sigData)
 }
 
 func ReadPublicKey(path string) (*rsa.PublicKey, error) {
 	// Read in keys
-	buf, err := ioutil.ReadFile("cla-rsa.pub")
+	buf, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +55,7 @@ func ReadPublicKey(path string) (*rsa.PublicKey, error) {
 }
 
 func ReadPrivateKey(path string) (*rsa.PrivateKey, error) {
-	buf, err := ioutil.ReadFile("cla-rsa")
+	buf, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
