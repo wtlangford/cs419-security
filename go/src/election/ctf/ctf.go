@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rsa"
 	"crypto/tls"
+	"crypto/x509"
 	"election/common"
 	"encoding/base64"
 	"encoding/json"
@@ -40,6 +41,7 @@ var ctf CTF = CTF {
 }
 var choices []string = []string{"tacocat", "racecar", "radar", "civic"}
 var claKey *rsa.PublicKey
+var certPool *x509.CertPool = x509.NewCertPool()
 
 func addValidationNumber(params FormPost) (int, string) {
 	vn := params.ValNum
@@ -111,10 +113,10 @@ func getResults() []byte {
 	// Send VNs to CLA, get back list of voters
 	payload, _ := json.Marshal(map[string][]string{"payload":vn})
 	t := &http.Transport {
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: &tls.Config{RootCAs:certPool},
 	}
 	client := &http.Client{Transport: t}
-	resp, err := client.Post("https://localhost:1444/voters", "application/json", bytes.NewBuffer(payload))
+	resp, err := client.Post("https://cla.wlangford.net:1444/voters", "application/json", bytes.NewBuffer(payload))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -139,6 +141,12 @@ func main() {
 	if claKey, err = common.ReadPublicKey("cla-rsa.pub"); err != nil {
 		log.Fatal(err)
 	}
+	pemFile, err := ioutil.ReadFile("/var/www/CA/certs/cacert.crt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	certPool.AppendCertsFromPEM(pemFile)
+
 	m := martini.Classic()
 
 	m.Post("/vn", binding.Bind(FormPost{}), addValidationNumber)
@@ -148,5 +156,5 @@ func main() {
 	m.Get("/", func() string {
 		return "Martini up!"
 	})
-	http.ListenAndServeTLS(":4000", "cert.pem", "key.pem", m)
+	http.ListenAndServeTLS("ctf.wlangford.net:4000", "cert.pem", "key.pem", m)
 }

@@ -4,11 +4,13 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
+	"crypto/x509"
 	"election/common"
 	"encoding/base64"
 	"encoding/json"
 	"github.com/go-martini/martini"
 	"github.com/martini-contrib/binding"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -29,6 +31,7 @@ var voter map[string]string = make (map[string]string)
 
 // Security Stuff
 var privKey *rsa.PrivateKey
+var certPool *x509.CertPool = x509.NewCertPool()
 
 // Generic handler for a generic page.
 func handler() string {
@@ -76,10 +79,10 @@ func SendToCTF(payload string) {
 
 	// Need to ignore self-signed cert. Signatures will be used to confirm identity
 	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: &tls.Config{RootCAs:certPool},
 	}
 	client := &http.Client{Transport: tr}
-	if _, err := client.PostForm("https://localhost:4000/vn",
+	if _, err := client.PostForm("https://ctf.wlangford.net:4000/vn",
 		url.Values{"vn": {payload}, "sig": {sig}}); err != nil {
 		log.Println(err)
 	}
@@ -107,11 +110,17 @@ func main() {
 	if privKey, err = common.ReadPrivateKey("cla-rsa"); err != nil {
 		log.Fatal(err)
 	}
+	pemFile, err := ioutil.ReadFile("/var/www/CA/certs/cacert.crt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	certPool.AppendCertsFromPEM(pemFile)
+
 
 	m := martini.Classic()
 	m.Post("/register", binding.Bind(Registration{}), RegisterUser)
 	m.Post("/voters", binding.Bind(ValidationNumbers{}), GetVotingUsers)
 	m.Get("/", handler)
 	log.Println("About to listen on 1444. Go to https://localhost:1444/")
-	log.Fatal(http.ListenAndServeTLS(":1444", "cert.pem", "key.pem", m))
+	log.Fatal(http.ListenAndServeTLS("cla.wlangford.net:1444", "cert.pem", "key.pem", m))
 }
