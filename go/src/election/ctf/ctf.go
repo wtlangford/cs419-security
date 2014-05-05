@@ -15,6 +15,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"sync"
 )
 
@@ -113,9 +114,11 @@ func getResults() (int, []byte) {
 		return 401, []byte("Voting not ended")
 	}
 	// Get list of validation numbers
-	vn := make([]string, len(ctf.validationNumbers))
-	for key, _ := range ctf.validationNumbers {
-		vn = append(vn, key)
+	vn := []string{}
+	for key, notVoted := range ctf.validationNumbers {
+		if !notVoted {
+			vn = append(vn, key)
+		}
 	}
 
 	// Send VNs to CLA, get back list of voters
@@ -141,9 +144,12 @@ func getResults() (int, []byte) {
 		log.Println("Unmarshal:", err)
 	}
 
+	for _,votes := range ctf.votes {
+		sort.Strings(votes)
+	}
 	// Return results
 	results := Results{ctf.votes, voters}
-	retval, err := json.Marshal(results)
+	retval, err := json.MarshalIndent(results," ","  ")
 	if err != nil {
 		log.Println("Marshal: ", err)
 	}

@@ -21,6 +21,9 @@ import (
 var secret map[string]string = map[string]string{
 	"a":    "1",
 	"b":    "2",
+	"c": "3",
+	"d": "4",
+	"e": "5",
 	"asdf": "1234",
 }
 
